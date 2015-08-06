@@ -3,9 +3,10 @@ package apns
 import (
 	"crypto/tls"
 	"errors"
-	"net"
 	"strings"
 	"time"
+	"google.golang.org/appengine/socket"
+	"golang.org/x/net/context"
 )
 
 var _ APNSClient = &Client{}
@@ -56,7 +57,7 @@ func NewClient(gateway, certificateFile, keyFile string) (c *Client) {
 
 // Send connects to the APN service and sends your push notification.
 // Remember that if the submission is successful, Apple won't reply.
-func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse) {
+func (client *Client) Send(context context.Context, pn *PushNotification) (resp *PushNotificationResponse) {
 	resp = new(PushNotificationResponse)
 
 	payload, err := pn.ToBytes()
@@ -66,7 +67,7 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		return
 	}
 
-	err = client.ConnectAndWrite(resp, payload)
+	err = client.ConnectAndWrite(context, resp, payload)
 	if err != nil {
 		resp.Success = false
 		resp.Error = err
@@ -90,7 +91,7 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 // Whichever channel puts data on first is the "winner". As such, it's
 // possible to get a false positive if Apple takes a long time to respond.
 // It's probably not a deal-breaker, but something to be aware of.
-func (client *Client) ConnectAndWrite(resp *PushNotificationResponse, payload []byte) (err error) {
+func (client *Client) ConnectAndWrite(context context.Context, resp *PushNotificationResponse, payload []byte) (err error) {
 	var cert tls.Certificate
 
 	if len(client.CertificateBase64) == 0 && len(client.KeyBase64) == 0 {
@@ -111,7 +112,7 @@ func (client *Client) ConnectAndWrite(resp *PushNotificationResponse, payload []
 		ServerName:   gatewayParts[0],
 	}
 
-	conn, err := net.Dial("tcp", client.Gateway)
+	conn, err := socket.Dial(context, "tcp", client.Gateway)
 	if err != nil {
 		return err
 	}
